@@ -18,12 +18,12 @@ fn main() {
 
     app.world.resource_mut::<Gravity>().0 = Vec2::new(0.0, 0.0);
     app.world.spawn(Camera2dBundle::default());
-    app.add_systems(Update, (move_cube, follow_cube, draw_body).chain());
+    app.add_systems(Update, (move_following, move_follower, draw_body).chain());
 
     app.world
         .spawn_empty()
         .insert(Name::new("Following"))
-        .insert(RigidBody::Static)
+        .insert(RigidBody::Kinematic)
         .insert(HasColor(Color::GREEN))
         .insert(Following)
         .insert(Collider::rectangle(100.0, 100.0))
@@ -54,31 +54,24 @@ fn draw_body(mut gizmos: Gizmos, characters: Query<(&GlobalTransform, &Collider,
     }
 }
 
-fn move_cube(mut query: Query<&mut Transform, With<Following>>, time: Res<Time>) {
-    for mut transform in query.iter_mut() {
-        transform.translation.x = (time.elapsed_seconds() / 1.0).sin() * 400.0;
+fn move_following(
+    mut query: Query<(&mut LinearVelocity, &GlobalTransform), With<Following>>,
+    time: Res<Time>,
+) {
+    for (mut velocity, gt) in query.iter_mut() {
+        let target_x = time.elapsed_seconds().sin() * 400.0;
+        velocity.x = (target_x - gt.translation().x) / time.delta_seconds();
     }
 }
 
-fn follow_cube(
+fn move_follower(
     mut follower: Query<&mut LinearVelocity, Without<Following>>,
-    following: Query<(&GlobalTransform, &Transform), With<Following>>,
-    time: Res<Time>,
+    following: Query<&LinearVelocity, With<Following>>,
 ) {
-    for (
-        mut vel,
-        (
-            gt,
-            Transform {
-                translation: Vec3 { x, .. },
-                ..
-            },
-        ),
-    ) in follower.iter_mut().zip(following.iter())
-    {
-        vel.x = (x - gt.translation().x) / time.delta_seconds();
+    for (mut vel, LinearVelocity(Vec2 { x, .. })) in follower.iter_mut().zip(following.iter()) {
+        vel.x = *x;
         // This sleep represents the rest of the systems that need to run before Velocity is
-        // actually applied. Without the sleep, the two objects move at the same speed.
-        sleep(Duration::from_millis(50))
+        // actually applied. Using too small of a delay causes the objects to run away.
+        sleep(Duration::from_millis(4))
     }
 }
